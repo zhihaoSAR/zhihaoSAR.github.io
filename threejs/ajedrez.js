@@ -12,8 +12,9 @@
 var renderer, scene, camera;
 
 // Objetos
-var esfera, conjunto, cubo;
+var esfera, conjunto, board,pawn;
 var materialUsuario;
+var moving = false, animationIter = null;
 
 // Control
 var cameraControls, effectControls;
@@ -33,13 +34,18 @@ var salto, volver;
 // Minicamara ................................................
 var minicam
 
-// Acciones
-init();
-loadScene();
-setupGUI();
-render();
+async function start(){
+	await init();
+	await loadScene();
+	setupGUI();
+	render();
+}
+start()
 
-function init() {
+// Acciones
+
+
+async function init() {
 	// Funcion de inicializacion de motor, escena y camara
 
 	// Motor de render
@@ -57,7 +63,7 @@ function init() {
 	var aspectRatio = window.innerWidth/window.innerHeight;
 	camera = new THREE.PerspectiveCamera( 75, aspectRatio, 0.1, 100 );	// Perspectiva
 	//camera = new THREE.OrthographicCamera( -10,10, 10/aspectRatio, -10/aspectRatio, 0.1, 100); //Ortografica
-	camera.position.set( 0.5, 2, 5 );
+	camera.position.set( 0.5, 9, 5 );
 	camera.lookAt( new THREE.Vector3( 0,0,0 ) );
     scene.add(camera);
 
@@ -98,10 +104,61 @@ function init() {
 	// Atender al eventos
 	window.addEventListener( 'resize', updateAspectRatio );
     // +++++++++++++++++++++++++++++++++++++++++++++++++++++
-    renderer.domElement.addEventListener('dblclick',mover);
+    renderer.domElement.addEventListener('click',mover);
 }
 
-function loadScene() {
+function getBoardPosition(x,y) {
+	
+	return {
+		x: 0.5625+ (x-1)* 1.125 - 4.5,
+		y: 0.8,
+		z: (9-y)*1.125 - 0.5625 - 4.5
+	}
+	//return new THREE.Vector3(0.5625+ (x-1)* 1.125 - 4.5,0.8,(9-y)*1.125 - 0.5625 - 4.5)
+
+}
+function getBoardIndex(p,world=false) {
+	var coor = p;
+	if(world){
+		coor = board.worldToLocal(p)
+	}
+	console.log(coor)
+	return {
+		x: Math.floor((coor.x + 4.5)/1.125)+1 ,
+		y: 8-Math.floor((coor.z + 4.5)/1.125)
+	}
+	
+
+}
+
+function* animation(miliseconds, ini, dst) {
+	var startTime = Date.now()
+	var now = 0
+	console.log(ini)
+	console.log(dst)
+	while(now < miliseconds){
+		now = Date.now()- startTime;
+		yield ini.clone().lerpVectors(ini,dst,now / miliseconds)
+	}
+	yield dst
+}
+
+function generatePawn(){
+	var loader = new THREE.ObjectLoader();
+	return new Promise((resolve,reject) => {
+		loader.load( 'models/fichas/chessPawn.json', 
+		         function (objeto){
+                    objeto.name = 'Pawn'
+					var pos = getBoardPosition(1,2)
+		         	objeto.position.set(pos.x,pos.y,pos.z)
+					objeto.scale.setScalar(0.3)
+					objeto.castShadow = true;
+					resolve(objeto);
+		         });
+	})
+}
+
+async function loadScene() {
 	// Construye el grafo de escena
 	// - Objetos (geometria, material)
 	// - Transformaciones 
@@ -114,39 +171,20 @@ function loadScene() {
     conjunto.name = 'conjunto';
 	conjunto.position.y = 1;
 
-	// Cubo ---------------------------------------------------------
+	// Board ---------------------------------------------------------
 
-    // 1. Crear el elemento de video en el documento
-    video = document.createElement('video');
-    video.src = "videos/pixar.mp4";
-    video.muted = true;
-    video.load();
-    video.play();
 
-    // 2. Asociar la imagen de video a un canvas
-    videoImage = document.createElement('canvas');
-    videoImage.width = 632;
-    videoImage.height = 256;
-    videoImageContent = videoImage.getContext('2d');
-    videoImageContent.fillStyle = '#0000FF';
-    videoImageContent.fillRect( 0,0,videoImage.width,videoImage.height);
-
-    // 3. Crear la textura
-    videoTexture = new THREE.Texture(videoImage);
-    videoTexture.minFilter = THREE.LinearFilter;
-    videoTexture.maxFilter = THREE.LinearFilter;
-
-    var materialVideo = new THREE.MeshLambertMaterial( {
-        color:'white',
-        wireframe: false,
-        map: videoTexture
-    });
-
-    var geoCubo = new THREE.BoxGeometry(2,2,2);
-    cubo = new THREE.Mesh( geoCubo, materialVideo );
-    cubo.name = 'cubo';
-    cubo.position.x = 2;
-    cubo.receiveShadow = cubo.castShadow = true;
+	var boardTex = new THREE.TextureLoader().load( 'models/fichas/chessboard_wood.jpg' );
+    var geoBoard = new THREE.BoxGeometry(9,1,9);
+	var boardMat = new THREE.MeshBasicMaterial( { map: boardTex } );
+    board = new THREE.Mesh( geoBoard, boardMat );
+    board.name = 'board';
+    board.position.x = 0
+	board.position.y = 0
+	board.position.z = 0
+    board.receiveShadow = board.castShadow = true;
+	pawn = await generatePawn() 
+	board.add(pawn)
 
     // --------------------------------------------------------------
 
@@ -182,32 +220,7 @@ function loadScene() {
 	suelo.receiveShadow = true;
 
 	// Objeto importado
-	var loader = new THREE.ObjectLoader();
-	loader.load( 'models/soldado/soldado.json', 
-		         function (objeto){
-                    objeto.name = 'soldado';
-		         	objeto.position.y = 1;
-		         	cubo.add(objeto);
-					var txsoldado = new THREE.TextureLoader().load('models/soldado/soldado.png');
-					objeto.material.setValues({map:txsoldado});
-					objeto.castShadow = true;
-		         	// Movimiento interpolado del objeto
-                    // +++
-		         	salto = new TWEEN.Tween( objeto.position ).
-		         	            to( {x: [0.2,0.3,0.5],
-		         	            	 y: [2.1,2.3,1.0],
-		         	            	 z: [0,0,0]}, 1000);
-		         	salto.easing( TWEEN.Easing.Bounce.Out );
-		         	salto.interpolation( TWEEN.Interpolation.Bezier );
-		         	//salto.start();
-
-                    // +++
-		         	volver = new TWEEN.Tween( objeto.position );
-		         	volver.to( {x:0,y:1,z:0}, 2000);
-		         	//salto.chain( volver );
-		         	//volver.chain( salto );
-
-		         });
+	
 
 	// Texto
 	var fontLoader = new THREE.FontLoader();
@@ -251,9 +264,7 @@ function loadScene() {
     habitacion.name = 'habitacion';
 
 	// Grafo
-	conjunto.add( cubo );
-	conjunto.add( esfera );
-	scene.add( conjunto );
+	scene.add( board );
 	scene.add( new THREE.AxesHelper(3) );
 	scene.add( suelo );
 	scene.add( habitacion );
@@ -308,35 +319,37 @@ function update()
 	// Incremento de 20º por segundo
 	angulo += Math.PI/9 * (ahora-antes)/1000;
 	antes = ahora;
-
+	
+	if(moving){
+		var step = animationIter.next()
+		if(!step.done){
+			pawn.position.copy(step.value)
+		}
+		else{
+			moving = false
+			animationIter = null
+		}
+	}
 	esfera.rotation.y = angulo;
 	conjunto.rotation.y = angulo/10;
 
 	// Cambio por demanda de usuario
 	conjunto.position.y = effectControls.posY;
 	esfera.position.x = -effectControls.separacion;
-	cubo.visible = effectControls.caja;
+	board.visible = effectControls.caja;
 	materialUsuario.setValues( {color:effectControls.color} );
 
 	// Actualizar interpoladores
 	TWEEN.update();
 
-    // ACtualizar video ----------------------------------------------
-
-    // 4. Poner el frame en la textura
-    if(video.readyState === video.HAVE_ENOUGH_DATA){
-        videoImageContent.drawImage(video,0,0);
-        if(videoTexture) videoTexture.needsUpdate = true;
-    }
-
-    // --------------------------------------------------------------
 }
 
 function mover(event) // ++++++++++++++++++++++++++++++++++++++++
 {
-    // Callback de atencion al doble click
-
-    // Localizar la posicion del doble click en coordenadas de ventana
+    // Callback de atencion al click
+	if(moving)
+		return
+    // Localizar la posicion del click en coordenadas de ventana
     var x = event.clientX;
     var y = event.clientY;
 
@@ -350,14 +363,15 @@ function mover(event) // ++++++++++++++++++++++++++++++++++++++++
 
     // Calcular interseccion con objetos de la escena
     var interseccion = rayo.intersectObjects( scene.children, true );
-    if( interseccion.length > 0){
-        // Ver si es el soldado
-        if(interseccion[0].object.name == 'soldado'){
-            salto.chain(volver);
-            salto.start();
+    for(var obj of interseccion){
+		// Ver si es el soldado
+        if(obj.object.name == 'board'){
+            console.log(obj)
+			var index = getBoardIndex(obj.point,true)
+			moving = true
+			animationIter = animation(1000,pawn.position.clone(), getBoardPosition(index.x,index.y))
         }
-    }
-
+	}
 }
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
