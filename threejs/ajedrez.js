@@ -36,6 +36,8 @@ var minicam
 // loader
 var objLoader = new THREE.ObjectLoader();
 var tex1p, tex2p
+// luces
+var ambiental, direccional, puntual,focal
 
 async function start(){
 	await init();
@@ -46,7 +48,14 @@ async function start(){
 start()
 
 // Acciones
-
+var fichaAltura = {
+	Pawn:0.7,
+	Rook:0.4,
+	Knight:0.9,
+	Bishop:0.5,
+	King:0.5,
+	Queen:0.5
+}
 
 async function init() {
 	// Funcion de inicializacion de motor, escena y camara
@@ -84,21 +93,21 @@ async function init() {
     // .............................................................
 
 	// Luces
-	var ambiental = new THREE.AmbientLight(0x222222);
+	ambiental = new THREE.AmbientLight(0x222222);
 	scene.add(ambiental);
 
-	var direccional = new THREE.DirectionalLight( 0xFFFFFF, 0.2 );
+	direccional = new THREE.DirectionalLight( 0xFFFFFF, 0.2 );
 	direccional.position.set( 0,1,0 );
 	scene.add( direccional );
 
-	var puntual = new THREE.PointLight( 0xFFFFFFF, 0.3 );
+	puntual = new THREE.PointLight( 0xFFFFFFF, 0.3 );
 	puntual.position.set( 2, 7, -4 );
 	scene.add( puntual );
 
-	var focal = new THREE.SpotLight( 0xFFFFFF, 0.5 );
-	focal.position.set( -2, 7, 4 );
+	focal = new THREE.SpotLight( 0xFFFFFF, 0.5 );
+	focal.position.set( 0, 7, 0 );
 	focal.target.position.set( 0,0,0 );
-	focal.angle = Math.PI/7;
+	focal.angle = Math.PI/5;
 	focal.penumbra = 0.5;
 	focal.castShadow = true;
 
@@ -110,11 +119,11 @@ async function init() {
     renderer.domElement.addEventListener('click',mover);
 }
 
-function getBoardPosition(x,y) {
+function getBoardPosition(x,y,type) {
 	
 	return {
 		x: 0.5625+ (x-1)* 1.125 - 4.5,
-		y: 0.8,
+		y: fichaAltura[type],
 		z: (9-y)*1.125 - 0.5625 - 4.5
 	}
 	//return new THREE.Vector3(0.5625+ (x-1)* 1.125 - 4.5,0.8,(9-y)*1.125 - 0.5625 - 4.5)
@@ -149,10 +158,10 @@ function generaFicha(tipo, nombre,indx,indy,mat){
 	return new Promise((resolve,reject) => {
 		objLoader.load( 'models/fichas/'+tipo+'.json', 
 		         function (objeto){
-					objeto = new THREE.Mesh(objeto.geometry, mat)
-                    //objeto.material = mat
+					//objeto = new THREE.Mesh(objeto.geometry, mat)
+                    objeto.material = mat
 					objeto.name = nombre
-					var pos = getBoardPosition(indx,indy)
+					var pos = getBoardPosition(indx,indy,nombre)
 		         	objeto.position.set(pos.x,pos.y,pos.z)
 					objeto.scale.setScalar(0.3)
 					objeto.castShadow = true;
@@ -163,24 +172,81 @@ function generaFicha(tipo, nombre,indx,indy,mat){
 	})
 }
 
+function jsonLoader(url) {
+	return new Promise((resolve) => {
+		new THREE.FileLoader().load(url, (data) => { resolve(JSON.parse(data))});
+	})
+
+} 
+function materialLoader(url) {
+	return new Promise((resolve,reject) => {
+		objLoader.load( url, 
+		         function (objeto){
+
+					resolve(objeto.material);
+		         });
+	})
+}
 async function genera1pFichas() {
-	var textLoader = new THREE.TextureLoader()
-	//var envTex1p = textLoader.load( 'models/fichas/1p.png' );
-	var envTex1p = THREE.ImageUtils.loadTexture('models/fichas/1p.png')
-	var normalMap = textLoader.load( 'models/fichas/normal.png' );
-	var mat1p = new THREE.MeshPhongMaterial({envMap:envTex1p, normalMap:normalMap,color:"white", specular: "white", emissive: "white", emissiveIntensity: 0.58})
-	console.log(await fetch('models/fichas/model.json'))
-	board.add(new THREE.Mesh(new THREE.BoxGeometry(5,5,5), mat1p))
+	var mat1p = await materialLoader('models/fichas/1pMat.json')
+	
 	for(let i = 1 ; i < 9; i++){
 		var ficha = await generaFicha('chessPawn','Pawn',i,2,mat1p)
-		console.log(mat1p)
-		console.log(ficha)
 		board.add(ficha)
+		mat1p = mat1p.clone()
 	}
-
-
+	board.add(await generaFicha('chessRook','Rook',1,1,mat1p)) 
+	mat1p = mat1p.clone()
+	board.add(await generaFicha('chessRook','Rook',8,1,mat1p)) 
+	mat1p = mat1p.clone()
+	ficha = await generaFicha('chessKnight','Knight',2,1,mat1p)
+	mat1p = mat1p.clone()
+	ficha.scale.setScalar(0.15)
+	ficha.rotateY(Math.PI)
+	board.add(ficha) 
+	ficha = await generaFicha('chessKnight','Knight',7,1,mat1p)
+	mat1p = mat1p.clone()
+	ficha.scale.setScalar(0.15)
+	ficha.rotateY(Math.PI)
+	board.add(ficha)
+	board.add(await generaFicha('chessBishop','Bishop',3,1,mat1p)) 
+	mat1p = mat1p.clone()
+	board.add(await generaFicha('chessBishop','Bishop',6,1,mat1p)) 
+	mat1p = mat1p.clone()
+	board.add(await generaFicha('chessKing','King',4,1,mat1p)) 
+	mat1p = mat1p.clone()
+	board.add(await generaFicha('chessQueen','Queen',5,1,mat1p)) 
+	mat1p = mat1p.clone()
 }
-
+async function genera2pFichas() {
+	var mat2p = await materialLoader('models/fichas/2pMat.json')
+	
+	for(let i = 1 ; i < 9; i++){
+		var ficha = await generaFicha('chessPawn','Pawn',i,7,mat2p)
+		board.add(ficha)
+		mat2p = mat2p.clone()
+	}
+	board.add(await generaFicha('chessRook','Rook',1,8,mat2p)) 
+	mat2p = mat2p.clone()
+	board.add(await generaFicha('chessRook','Rook',8,8,mat2p)) 
+	mat2p = mat2p.clone()
+	ficha = await generaFicha('chessKnight','Knight',2,8,mat2p)
+	mat2p = mat2p.clone()
+	ficha.scale.setScalar(0.15)
+	board.add(ficha) 
+	ficha = await generaFicha('chessKnight','Knight',7,8,mat2p)
+	mat2p = mat2p.clone()
+	ficha.scale.setScalar(0.15)
+	board.add(ficha)
+	board.add(await generaFicha('chessBishop','Bishop',3,8,mat2p)) 
+	mat2p = mat2p.clone()
+	board.add(await generaFicha('chessBishop','Bishop',6,8,mat2p)) 
+	mat2p = mat2p.clone()
+	board.add(await generaFicha('chessKing','King',4,8,mat2p)) 
+	mat2p = mat2p.clone()
+	board.add(await generaFicha('chessQueen','Queen',5,8,mat2p)) 
+	mat2p = mat2p.clone()
+}
 async function loadScene() {
 	// Construye el grafo de escena
 	// - Objetos (geometria, material)
@@ -199,15 +265,15 @@ async function loadScene() {
 
 	var boardTex = new THREE.TextureLoader().load( 'models/fichas/chessboard_wood.jpg' );
     var geoBoard = new THREE.BoxGeometry(9,1,9);
-	var boardMat = new THREE.MeshBasicMaterial( { map: boardTex } );
+	var boardMat = new THREE.MeshStandardMaterial( { map: boardTex } );
     board = new THREE.Mesh( geoBoard, boardMat );
     board.name = 'board';
     board.position.x = 0
 	board.position.y = 0
 	board.position.z = 0
     board.receiveShadow = board.castShadow = true; 
-	console.log(geoBoard)
 	await genera1pFichas()
+	await genera2pFichas()
 
     // --------------------------------------------------------------
 
@@ -216,61 +282,9 @@ async function loadScene() {
 	                path+"posy.jpg" , path + "negy.jpg",
 	                path+"posz.jpg" , path + "negz.jpg"];
 
-	var texEsfera = new THREE.CubeTextureLoader().load( entorno );
-	                
-	var geoEsfera = new THREE.SphereGeometry( 1, 30, 30 );
-	var matEsfera = new THREE.MeshPhongMaterial( {color:'yellow',
-                                                  specular: 'gray',
-                                                  shininess: 40,
-                                                  envMap: texEsfera } );
-	esfera = new THREE.Mesh( geoEsfera, matEsfera );
-    esfera.name = 'esfera';
-	esfera.receiveShadow = esfera.castShadow = true;
 
-	// Suelo
-	var texSuelo = new THREE.TextureLoader().load(path+"r_256.jpg");
-	texSuelo.minFilter = THREE.LinearFilter;
-	texSuelo.magFilter = THREE.LinearFilter;
-	texSuelo.repeat.set( 2,3 );
-	texSuelo.wrapS = texSuelo.wrapT = THREE.MirroredRepeatWrapping;
-
-	var geoSuelo = new THREE.PlaneGeometry(10,10,100,100);
-	var matSuelo = new THREE.MeshLambertMaterial( {color:'gray', map:texSuelo} );
-	var suelo = new THREE.Mesh( geoSuelo, matSuelo );
-    suelo.name = 'suelo';
-	suelo.rotation.x = -Math.PI/2;
-	suelo.position.y = -0.1;
-	suelo.receiveShadow = true;
-
-	// Objeto importado
 	
-
-	// Texto
-	var fontLoader = new THREE.FontLoader();
-	materialUsuario = new THREE.MeshPhongMaterial({color:'red',
-                                                   specular: 'red',
-                                                   shininess: 50 });
-	fontLoader.load( 'fonts/gentilis_bold.typeface.json',
-		             function(font){
-		             	var geoTexto = new THREE.TextGeometry( 
-		             		'soldado',
-		             		{
-		             			size: 0.5,
-		             			height: 0.1,
-		             			curveSegments: 3,
-		             			style: "normal",
-		             			font: font,
-		             			bevelThickness: 0.05,
-		             			bevelSize: 0.04,
-		             			bevelEnabled: true
-		             		});
-		             	var texto = new THREE.Mesh( geoTexto, materialUsuario );
-		             	texto.name = 'texto';
-                        texto.receiveShadow = texto.castShadow = true;
-		             	scene.add( texto );
-		             	texto.position.x = -1;
-		             });
-
+	var texEsfera = new THREE.CubeTextureLoader().load( entorno );
 	// Habitacion
 	var shader = THREE.ShaderLib.cube;
 	shader.uniforms.tCube.value = texEsfera;
@@ -289,7 +303,6 @@ async function loadScene() {
 	// Grafo
 	scene.add( board );
 	scene.add( new THREE.AxesHelper(3) );
-	scene.add( suelo );
 	scene.add( habitacion );
 }
 
@@ -316,27 +329,56 @@ function setupGUI()
 
 	// Controles
 	effectControls = {
-		mensaje: "Interfaz",
-		posY: 1.0,
-		separacion: [],
-		caja: true,
-		color: "rgb(255,0,0)"
+		ambientOn: true,
+		direccionalOn: true,
+		puntualOn: true,
+		focalOn: true,
+		ambientColor: "rgb(255,255,255)",
+		direccionalColor: "rgb(255,255,255)",
+		puntualColor: "rgb(255,255,255)",
+		focalColor: "rgb(255,255,255)",
+		ambientalIntensidad: 0.4,
+		direccionalIntensidad: 0.4,
+		puntualIntensidad: 0.4,
+		focalIntensidad: 0.4
 	};
 
 	// Interfaz
 	var gui = new dat.GUI();
-	var folder = gui.addFolder("Interfaz Soldado World");
-	folder.add( effectControls, "mensaje" ).name("App");
-	folder.add( effectControls, "posY", 1.0, 3.0, 0.1 ).name("Subir/Bajar");
-	folder.add( effectControls, "separacion", {Ninguna:0, Media:1, Maxima:2} ).name("Separacion");
-	folder.add( effectControls, "caja" ).name("Ver al soldado");
-	folder.addColor( effectControls, "color" ).name("Color texto");
+	var folder = gui.addFolder("Interfaz ajedrez World");
+	folder.add( effectControls, "ambientOn" ).name("Activar ambiente luz");
+	folder.addColor( effectControls, "ambientColor" ).name("Ambiente color");
+	folder.add( effectControls, "ambientalIntensidad", 0.0, 3.0, 0.1 ).name("Ambiente intensidad");
+	folder.add( effectControls, "direccionalOn" ).name("Activar direccional luz");
+	folder.addColor( effectControls, "direccionalColor" ).name("Direccional color");
+	folder.add( effectControls, "direccionalIntensidad", 0.0, 3.0, 0.1 ).name("Direccional intensidad");
+	folder.add( effectControls, "puntualOn" ).name("Activar puntual luz");
+	folder.addColor( effectControls, "puntualColor" ).name("Puntual color");
+	folder.add( effectControls, "puntualIntensidad", 0.0, 3.0, 0.1 ).name("Puntual intensidad");
+	folder.add( effectControls, "focalOn" ).name("Activar focal luz");
+	folder.addColor( effectControls, "focalColor" ).name("Focal color");
+	folder.add( effectControls, "focalIntensidad", 0.0, 3.0, 0.1 ).name("Focal intensidad");
+	
 }
 
+function updateLight () {
+	ambiental.color.set(effectControls.ambientColor)
+	ambiental.visible = effectControls.ambientOn
+	direccional.color.set(effectControls.direccionalColor)
+	direccional.visible = effectControls.direccionalOn
+	puntual.color.set(effectControls.puntualColor)
+	puntual.visible = effectControls.puntualOn
+	focal.color.set(effectControls.focalColor)
+	focal.visible = effectControls.focalOn
+	ambiental.intensity = effectControls.ambientalIntensidad
+	direccional.intensity = effectControls.direccionalIntensidad
+	puntual.intensity = effectControls.puntualIntensidad
+	focal.intensity = effectControls.focalIntensidad
+} 
 function update()
 {
+	updateLight() 
 	// Cambiar propiedades entre frames
-
 	// Tiempo transcurrido
 	var ahora = Date.now();
 	// Incremento de 20º por segundo
@@ -351,20 +393,11 @@ function update()
 		else{
 			moving = false
 			animationIter = null
+			select.material.emissive.set('white')
 			select = null
 		}
 	}
-	esfera.rotation.y = angulo;
-	conjunto.rotation.y = angulo/10;
 
-	// Cambio por demanda de usuario
-	conjunto.position.y = effectControls.posY;
-	esfera.position.x = -effectControls.separacion;
-	board.visible = effectControls.caja;
-	materialUsuario.setValues( {color:effectControls.color} );
-
-	// Actualizar interpoladores
-	TWEEN.update();
 
 }
 
@@ -394,16 +427,23 @@ function mover(event) // ++++++++++++++++++++++++++++++++++++++++
 			if(obj.object.name == 'board'){
 				var index = getBoardIndex(obj.point,true)
 				moving = true
-				animationIter = animation(1000,select.position.clone(), getBoardPosition(index.x,index.y))
-				break
+				animationIter = animation(1000,select.position.clone(), getBoardPosition(index.x,index.y,select.name))
+				return
 			}
 		}
 		else {
 			if(obj.object.tag == 'ficha'){
 				select = obj.object
-				break
+				select.material.emissive.set('red')
+				console.log(select)
+				return
 			}
-		}  
+		} 
+		if(select){
+			select.material.emissive.set('white')
+			select = null
+		} 
+		
 	}
 }
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
