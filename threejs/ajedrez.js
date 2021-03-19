@@ -12,7 +12,7 @@
 var renderer, scene, camera;
 
 // Objetos
-var esfera, conjunto, board,pawn;
+var esfera, conjunto, board,select = null;
 var materialUsuario;
 var moving = false, animationIter = null;
 
@@ -33,6 +33,9 @@ var salto, volver;
 
 // Minicamara ................................................
 var minicam
+// loader
+var objLoader = new THREE.ObjectLoader();
+var tex1p, tex2p
 
 async function start(){
 	await init();
@@ -134,8 +137,6 @@ function getBoardIndex(p,world=false) {
 function* animation(miliseconds, ini, dst) {
 	var startTime = Date.now()
 	var now = 0
-	console.log(ini)
-	console.log(dst)
 	while(now < miliseconds){
 		now = Date.now()- startTime;
 		yield ini.clone().lerpVectors(ini,dst,now / miliseconds)
@@ -143,19 +144,41 @@ function* animation(miliseconds, ini, dst) {
 	yield dst
 }
 
-function generatePawn(){
-	var loader = new THREE.ObjectLoader();
+function generaFicha(tipo, nombre,indx,indy,mat){
+	
 	return new Promise((resolve,reject) => {
-		loader.load( 'models/fichas/chessPawn.json', 
+		objLoader.load( 'models/fichas/'+tipo+'.json', 
 		         function (objeto){
-                    objeto.name = 'Pawn'
-					var pos = getBoardPosition(1,2)
+					objeto = new THREE.Mesh(objeto.geometry, mat)
+                    //objeto.material = mat
+					objeto.name = nombre
+					var pos = getBoardPosition(indx,indy)
 		         	objeto.position.set(pos.x,pos.y,pos.z)
 					objeto.scale.setScalar(0.3)
 					objeto.castShadow = true;
+					objeto.tag = 'ficha'
+
 					resolve(objeto);
 		         });
 	})
+}
+
+async function genera1pFichas() {
+	var textLoader = new THREE.TextureLoader()
+	//var envTex1p = textLoader.load( 'models/fichas/1p.png' );
+	var envTex1p = THREE.ImageUtils.loadTexture('models/fichas/1p.png')
+	var normalMap = textLoader.load( 'models/fichas/normal.png' );
+	var mat1p = new THREE.MeshPhongMaterial({envMap:envTex1p, normalMap:normalMap,color:"white", specular: "white", emissive: "white", emissiveIntensity: 0.58})
+	console.log(await fetch('models/fichas/model.json'))
+	board.add(new THREE.Mesh(new THREE.BoxGeometry(5,5,5), mat1p))
+	for(let i = 1 ; i < 9; i++){
+		var ficha = await generaFicha('chessPawn','Pawn',i,2,mat1p)
+		console.log(mat1p)
+		console.log(ficha)
+		board.add(ficha)
+	}
+
+
 }
 
 async function loadScene() {
@@ -182,9 +205,9 @@ async function loadScene() {
     board.position.x = 0
 	board.position.y = 0
 	board.position.z = 0
-    board.receiveShadow = board.castShadow = true;
-	pawn = await generatePawn() 
-	board.add(pawn)
+    board.receiveShadow = board.castShadow = true; 
+	console.log(geoBoard)
+	await genera1pFichas()
 
     // --------------------------------------------------------------
 
@@ -323,11 +346,12 @@ function update()
 	if(moving){
 		var step = animationIter.next()
 		if(!step.done){
-			pawn.position.copy(step.value)
+			select.position.copy(step.value)
 		}
 		else{
 			moving = false
 			animationIter = null
+			select = null
 		}
 	}
 	esfera.rotation.y = angulo;
@@ -365,12 +389,21 @@ function mover(event) // ++++++++++++++++++++++++++++++++++++++++
     var interseccion = rayo.intersectObjects( scene.children, true );
     for(var obj of interseccion){
 		// Ver si es el soldado
-        if(obj.object.name == 'board'){
-            console.log(obj)
-			var index = getBoardIndex(obj.point,true)
-			moving = true
-			animationIter = animation(1000,pawn.position.clone(), getBoardPosition(index.x,index.y))
-        }
+		if(select){
+			console.log(select)
+			if(obj.object.name == 'board'){
+				var index = getBoardIndex(obj.point,true)
+				moving = true
+				animationIter = animation(1000,select.position.clone(), getBoardPosition(index.x,index.y))
+				break
+			}
+		}
+		else {
+			if(obj.object.tag == 'ficha'){
+				select = obj.object
+				break
+			}
+		}  
 	}
 }
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

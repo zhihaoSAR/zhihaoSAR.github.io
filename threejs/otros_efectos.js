@@ -191,6 +191,7 @@ function loadScene() {
 					var txsoldado = new THREE.TextureLoader().load('models/soldado/soldado.png');
 					objeto.material.setValues({map:txsoldado});
 					objeto.castShadow = true;
+					console.log(objeto)
 		         	// Movimiento interpolado del objeto
                     // +++
 		         	salto = new TWEEN.Tween( objeto.position ).
